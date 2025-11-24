@@ -1,5 +1,4 @@
-# Use a verified working OpenJDK 17 image
-FROM openjdk:17
+FROM openjdk:17-jdk
 
 WORKDIR /app
 
