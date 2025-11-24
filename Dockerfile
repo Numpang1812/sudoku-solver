@@ -3,8 +3,8 @@ WORKDIR /app
 
 COPY . .
 
-RUN mkdir -p classes && javac -d classes src/main/java/*.java
+RUN mkdir -p classes && javac $(find Sudoku/src/main/java -name "*.java") -d classes
 
 EXPOSE 10000
 
-CMD ["java", "-cp", "classes", "src.main.java.SudokuServer"]
+CMD ["java", "-cp", "classes", "SudokuServer"]
