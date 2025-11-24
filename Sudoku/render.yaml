@@ -1,6 +1,0 @@
-services:
-  - type: web
-    name: sudoku-solver
-    env: java
-    buildCommand: javac src/main/java/*.java -d .
-    startCommand: java SudokuServer
