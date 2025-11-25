@@ -11,4 +11,4 @@ RUN mkdir -p classes && javac $(find src/main/java -name "*.java") -d classes
 EXPOSE 10000
 
 # Run the server using the fully-qualified class name
-CMD ["java", "-cp", "classes", "src.main.java.SudokuServer"]
+CMD ["java", "-cp", "classes", "SudokuServer"]
