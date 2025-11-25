@@ -1,4 +1,4 @@
-package src.main.java;
+
 public class SudokuSolver {
     public static boolean isSafe(int[][] mat, int row, int col, int num) {
         for (int x = 0; x < 9; x++)
