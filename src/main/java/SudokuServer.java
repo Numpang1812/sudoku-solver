@@ -193,9 +193,9 @@ class Handler implements HttpHandler {
                     </table>
                     
                     <div class="buttons">
-                        <button id="btn-backtrack" onclick="solve('backtrack')">Solve (Backtrack)</button>
+                        <button id="btn-backtrack" onclick="solve('backtrack')">Solve (Bitmask Backtracking)</button>
                         <button id="btn-dlx" onclick="solve('dlx')">Solve (DLX)</button>
-                        <button id="btn-simple" onclick="solve('simple')">Solve (Simple)</button>
+                        <button id="btn-simple" onclick="solve('simple')">Solve (Simple Backtracking)</button>
                         <button id="btn-clear" onclick="clearGrid()">Clear</button>
                     </div>
                     
