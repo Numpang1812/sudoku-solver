@@ -181,11 +181,11 @@ class Handler implements HttpHandler {
                 <h2>Sudoku Solver</h2>
                 <div class="container">
                     <div class="difficulty-buttons">
-                        <button class="difficulty-btn very-easy" onclick="loadPuzzle('very-easy')">Very Easy</button>
-                        <button class="difficulty-btn easy" onclick="loadPuzzle('easy')">Easy</button>
+                        <button class="difficulty-btn very-easy" onclick="loadPuzzle('easy')">Very Easy</button>
+                        <button class="difficulty-btn easy" onclick="loadPuzzle('very-easy')">Easy</button>
                         <button class="difficulty-btn medium" onclick="loadPuzzle('medium')">Medium</button>
-                        <button class="difficulty-btn hard" onclick="loadPuzzle('hard')">Hard</button>
-                        <button class="difficulty-btn very-hard" onclick="loadPuzzle('very-hard')">Very Hard</button>
+                        <button class="difficulty-btn hard" onclick="loadPuzzle('very-hard')">Hard</button>
+                        <button class="difficulty-btn very-hard" onclick="loadPuzzle('hard')">Very Hard</button>
                     </div>
                     
                     <table id="sudoku-grid">
@@ -343,7 +343,7 @@ class Handler implements HttpHandler {
         if ("POST".equals(t.getRequestMethod())) {
             String body = new String(t.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             try {
-                String method = "backtrack";
+                String method = "bitmask";
                 if (body.contains("\"method\":\"dlx\"")) {
                     method = "dlx";
                 } else if (body.contains("\"method\":\"simple\"")) {
