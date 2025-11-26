@@ -181,6 +181,12 @@ class Handler implements HttpHandler {
                 <h2>Sudoku Solver</h2>
                 <div class="container">
                     <div class="difficulty-buttons">
+                        <!--
+                        I switched hard with very-hard and very-easy with easy because
+                        the API that is generating the puzzles is not consistent
+                        The "hard" puzzles are actually very hard and the "very-hard" puzzles are easier than the hard ones.
+                        Same thing for easy and very-easy.
+                        -->
                         <button class="difficulty-btn very-easy" onclick="loadPuzzle('easy')">Very Easy</button>
                         <button class="difficulty-btn easy" onclick="loadPuzzle('very-easy')">Easy</button>
                         <button class="difficulty-btn medium" onclick="loadPuzzle('medium')">Medium</button>
