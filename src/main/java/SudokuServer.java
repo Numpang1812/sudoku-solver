@@ -112,6 +112,23 @@ class Handler implements HttpHandler {
                         justify-content: center;
                         gap: 12px;
                         margin-top: 10px;
+                        flex-wrap: wrap;
+                        max-width: 450px;
+                        margin-left: auto;
+                        margin-right: auto;
+                    }
+
+                    .buttons button {
+                        padding: 10px 16px;
+                        font-size: 15px;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+                        transition: 0.2s ease;
+                        font-weight: 500;
+                        width: calc(33.333% - 12px); /* 3 buttons per row accounting for gap */
+                        min-width: 120px;
                     }
 
                     button {
@@ -178,6 +195,7 @@ class Handler implements HttpHandler {
                     <div class="buttons">
                         <button id="btn-backtrack" onclick="solve('backtrack')">Solve (Backtrack)</button>
                         <button id="btn-dlx" onclick="solve('dlx')">Solve (DLX)</button>
+                        <button id="btn-simple" onclick="solve('simple')">Solve (Simple)</button>
                         <button id="btn-clear" onclick="clearGrid()">Clear</button>
                     </div>
                     
@@ -328,8 +346,10 @@ class Handler implements HttpHandler {
                 String method = "backtrack";
                 if (body.contains("\"method\":\"dlx\"")) {
                     method = "dlx";
-                }
-                
+                } else if (body.contains("\"method\":\"simple\"")) {
+                    method = "simple";
+                } 
+
                 int startIdx = body.indexOf("\"puzzle\":") + 9;
                 String puzzleStr = body.substring(startIdx).trim();
                 if (puzzleStr.endsWith("}")) {
@@ -340,6 +360,8 @@ class Handler implements HttpHandler {
                 long timeNanos;
                 if ("dlx".equals(method)) {
                     timeNanos = SudokuDLX.solveWithTime(puzzle);
+                } else if ("simple".equals(method)) {
+                    timeNanos = SudokuSolverSimple.solveSudokuWithTime(puzzle);
                 } else {
                     timeNanos = SudokuSolver.solveSudokuWithTime(puzzle);
                 }
