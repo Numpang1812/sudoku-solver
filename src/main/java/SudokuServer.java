@@ -258,7 +258,20 @@ class Handler implements HttpHandler {
                                         cell.style.color = value !== 0 ? '#e74c3c' : '#2c3e50';
                                     }
                                 }
-                                infoEl.textContent = `Loaded ${difficulty.replace('-', ' ')} puzzle`;
+                                let displayDifficulty;
+                                if (difficulty === 'easy') {
+                                    displayDifficulty = 'Very Easy';
+                                } else if (difficulty === 'very-easy') {
+                                    displayDifficulty = 'Easy';
+                                } else if (difficulty === 'hard') {
+                                    displayDifficulty = 'Very Hard';
+                                } else if (difficulty === 'very-hard') {
+                                    displayDifficulty = 'Hard';
+                                } else {
+                                    displayDifficulty = difficulty.replace('-', ' ');
+                                }
+                                infoEl.textContent = `Loaded ${displayDifficulty} puzzle`;
+                                infoEl.classList.remove('loading');
                                 infoEl.style.color = '#2c3e50';
                             } else {
                                 infoEl.textContent = 'Failed to load puzzle';
