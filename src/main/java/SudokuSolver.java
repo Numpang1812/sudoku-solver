@@ -1,32 +1,33 @@
 import java.util.Arrays;
+
 public class SudokuSolver {
-    private static int[] rowMask = new int[9];
-    private static int[] colMask = new int[9];
-    private static int[] boxMask = new int[9];
-    
-    // Function to check if it is safe to place num at mat[row][col] using bitmasks
-    public static boolean isSafe(int[][] mat, int row, int col, int num) {
+    private static int[] rowMask;
+    private static int[] colMask;
+    private static int[] boxMask;
+    private static int N; // Grid Size
+    private static int SQRT; // Box Size
+
+    public static boolean isSafe(int row, int col, int num) {
         int bit = 1 << num;
-        int boxIndex = (row / 3) * 3 + (col / 3);
+        int boxIndex = (row / SQRT) * SQRT + (col / SQRT);
         
-        // Check if num exists in row, column, or box using bitwise AND
         return (rowMask[row] & bit) == 0 && 
                (colMask[col] & bit) == 0 && 
                (boxMask[boxIndex] & bit) == 0;
     }
 
     public static boolean solveSudokuRec(int[][] mat, int row, int col) {
-        if (row == 8 && col == 9) return true;
-        if (col == 9) { row++; col = 0; }
+        if (row == N - 1 && col == N) return true;
+        if (col == N) { row++; col = 0; }
+        
         if (mat[row][col] != 0) return solveSudokuRec(mat, row, col + 1);
         
-        int boxIndex = (row / 3) * 3 + (col / 3);
+        int boxIndex = (row / SQRT) * SQRT + (col / SQRT);
         
-        for (int num = 1; num <= 9; num++) {
-            if (isSafe(mat, row, col, num)) {
+        for (int num = 1; num <= N; num++) {
+            if (isSafe(row, col, num)) {
                 int bit = 1 << num;
                 
-                // Place number and update masks
                 mat[row][col] = num;
                 rowMask[row] |= bit;
                 colMask[col] |= bit;
@@ -34,7 +35,6 @@ public class SudokuSolver {
                 
                 if (solveSudokuRec(mat, row, col + 1)) return true;
                 
-                // Backtrack: remove number and clear masks
                 mat[row][col] = 0;
                 rowMask[row] &= ~bit;
                 colMask[col] &= ~bit;
@@ -45,29 +45,34 @@ public class SudokuSolver {
     }
 
     public static long solveSudokuWithTime(int[][] grid) {
-        // Initialize bitmasks from the initial grid
+        N = grid.length;
+        SQRT = (int) Math.sqrt(N);
+        if (SQRT * SQRT != N) return -1; // Basic validation
+
+        rowMask = new int[N];
+        colMask = new int[N];
+        boxMask = new int[N];
+
         initializeMasks(grid);
         
         long start = System.nanoTime();
-        boolean solved = solveSudoku(grid);
+        boolean solved = solveSudokuRec(grid, 0, 0);
         long end = System.nanoTime();
         
         return solved ? (end - start) : -1;
     }
     
     private static void initializeMasks(int[][] grid) {
-        // Reset masks
         Arrays.fill(rowMask, 0);
         Arrays.fill(colMask, 0);
         Arrays.fill(boxMask, 0);
         
-        // Initialize masks with pre-filled numbers
-        for (int i = 0; i < 9; i++) {
-            for (int j = 0; j < 9; j++) {
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
                 if (grid[i][j] != 0) {
                     int num = grid[i][j];
                     int bit = 1 << num;
-                    int boxIndex = (i / 3) * 3 + (j / 3);
+                    int boxIndex = (i / SQRT) * SQRT + (j / SQRT);
                     
                     rowMask[i] |= bit;
                     colMask[j] |= bit;
@@ -75,9 +80,5 @@ public class SudokuSolver {
                 }
             }
         }
-    }
-    
-    public static boolean solveSudoku(int[][] mat) {
-        return solveSudokuRec(mat, 0, 0);
     }
 }

@@ -1,85 +1,80 @@
-class SudokuSolverSimple {
+public class SudokuSolverSimple {
 
     // Function to check if it is safe to place num at mat[row][col]
-    static boolean isSafe(int[][] mat, int row, int col, int num) {
+    static boolean isSafe(int[][] mat, int row, int col, int num, int n, int sqrt) {
         
-        // Check if num exists in the row
-        for (int x = 0; x < 9; x++)
+        // Check Row
+        for (int x = 0; x < n; x++)
             if (mat[row][x] == num)
                 return false;
 
-        // Check if num exists in the col
-        for (int x = 0; x < 9; x++)
+        // Check Column
+        for (int x = 0; x < n; x++)
             if (mat[x][col] == num)
                 return false;
 
-        // Check if num exists in the 3x3 sub-matrix
-        int startRow = row - (row % 3), startCol = col - (col % 3);
+        // Check Sub-matrix (Box)
+        int startRow = row - (row % sqrt);
+        int startCol = col - (col % sqrt);
 
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 3; j++)
+        for (int i = 0; i < sqrt; i++)
+            for (int j = 0; j < sqrt; j++)
                 if (mat[i + startRow][j + startCol] == num)
                     return false;
 
         return true;
     }
 
-    // Function to solve the Sudoku problem
-    static boolean solveSudokuRec(int[][] mat, int row, int col) {
-      
-        // base case: Reached nth column of the last row
-        if (row == 8 && col == 9)
+    static boolean solveSudokuRec(int[][] mat, int row, int col, int n, int sqrt) {
+        // Base case: Reached end of grid
+        if (row == n - 1 && col == n)
             return true;
 
-        // If last column of the row go to the next row
-        if (col == 9) {
+        // Move to next row
+        if (col == n) {
             row++;
             col = 0;
         }
 
-        // If cell is already occupied then move forward
+        // Skip filled cells
         if (mat[row][col] != 0)
-            return solveSudokuRec(mat, row, col + 1);
+            return solveSudokuRec(mat, row, col + 1, n, sqrt);
 
-        for (int num = 1; num <= 9; num++) {
-          
-            // If it is safe to place num at current position
-            if (isSafe(mat, row, col, num)) {
+        for (int num = 1; num <= n; num++) {
+            if (isSafe(mat, row, col, num, n, sqrt)) {
                 mat[row][col] = num;
-                if (solveSudokuRec(mat, row, col + 1))
+                if (solveSudokuRec(mat, row, col + 1, n, sqrt))
                     return true;
-                mat[row][col] = 0;
+                mat[row][col] = 0; // Backtrack
             }
         }
 
         return false;
     }
 
-    static boolean solveSudoku(int[][] mat) {
-        return solveSudokuRec(mat, 0, 0);
-    }
-
-    // Add this method:
     static long solveSudokuWithTime(int[][] puzzle) {
-        // Create a copy to avoid modifying the original during timing
-        int[][] puzzleCopy = new int[9][9];
-        for (int i = 0; i < 9; i++) {
-            System.arraycopy(puzzle[i], 0, puzzleCopy[i], 0, 9);
+        int n = puzzle.length;
+        int sqrt = (int) Math.sqrt(n);
+        
+        // Validation for perfect square sizes
+        if (sqrt * sqrt != n) return -1;
+
+        int[][] puzzleCopy = new int[n][n];
+        for (int i = 0; i < n; i++) {
+            System.arraycopy(puzzle[i], 0, puzzleCopy[i], 0, n);
         }
         
         long startTime = System.nanoTime();
-        boolean solved = solveSudoku(puzzleCopy);
+        boolean solved = solveSudokuRec(puzzleCopy, 0, 0, n, sqrt);
         long endTime = System.nanoTime();
         
         if (solved) {
-            // Copy solution back to original array
-            for (int i = 0; i < 9; i++) {
-                System.arraycopy(puzzleCopy[i], 0, puzzle[i], 0, 9);
+            for (int i = 0; i < n; i++) {
+                System.arraycopy(puzzleCopy[i], 0, puzzle[i], 0, n);
             }
             return endTime - startTime;
         } else {
-            return -1; // Indicate no solution found
+            return -1;
         }
     }
-
 }

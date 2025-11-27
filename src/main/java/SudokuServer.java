@@ -1,4 +1,3 @@
-
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
@@ -9,184 +8,117 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.Arrays;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.nio.charset.StandardCharsets;
+
+public class SudokuServer {
+    public static void main(String[] args) throws IOException {
+        int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        server.createContext("/", new Handler());
+        // Use a thread pool to handle multiple users simultaneously
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+        server.start();
+        System.out.println("Server running at http://localhost:" + port);
+        System.out.println("Supports 9x9, 16x16, 25x25 with Simple, Bitmask, and DLX algorithms.");
+    }
+}
 
 class Handler implements HttpHandler {
     private static final HttpClient httpClient = HttpClient.newHttpClient();
 
     public void handle(HttpExchange t) throws IOException {
+        String path = t.getRequestURI().getPath();
+        if (path.equals("/")) {
+            handleRoot(t);
+        } else if (path.equals("/solve")) {
+            handleSolveRequest(t);
+        } else if (path.equals("/load-puzzle")) {
+            handleLoadPuzzleRequest(t);
+        } else {
+            t.sendResponseHeaders(404, -1);
+        }
+    }
+
+    private void handleRoot(HttpExchange t) throws IOException {
         String response = """
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Sudoku Solver</title>
+                <title>Sudoku Solver (Multi-Algo)</title>
                 <style>
-                    body {
-                        font-family: "Poppins", Arial, sans-serif;
-                        background: #f2f5f9;
-                        margin: 0;
-                        padding: 0;
-                    }
-
-                    h2 {
-                        text-align: center;
-                        margin-top: 30px;
-                        font-size: 28px;
-                        color: #333;
-                    }
-
+                    body { font-family: "Poppins", Arial, sans-serif; background: #f2f5f9; margin: 0; padding: 0; }
+                    h2 { text-align: center; margin-top: 20px; color: #333; }
                     .container {
-                        width: 450px;
-                        margin: 20px auto;
-                        background: #ffffff;
-                        padding: 25px;
-                        border-radius: 18px;
+                        width: fit-content; min-width: 500px; max-width: 95%; margin: 20px auto;
+                        background: #ffffff; padding: 25px; border-radius: 18px;
                         box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                        display: flex; flex-direction: column; align-items: center;
                     }
-
-                    .difficulty-buttons {
-                        display: flex;
-                        justify-content: center;
-                        gap: 8px;
-                        margin-bottom: 20px;
-                        flex-wrap: wrap;
-                    }
-
+                    .controls-top { display: flex; gap: 20px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; justify-content: center; }
+                    select { padding: 8px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; min-width: 100px; }
+                    label { font-weight: 500; color: #555; }
+                    
+                    .difficulty-buttons { display: flex; gap: 8px; margin-bottom: 15px; }
                     .difficulty-btn {
-                        padding: 8px 12px;
-                        font-size: 12px;
-                        border: none;
-                        border-radius: 6px;
-                        cursor: pointer;
-                        transition: 0.2s ease;
-                        font-weight: 500;
+                        padding: 8px 12px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; color: white; transition: 0.2s;
                     }
-
-                    .very-easy { background: #4CAF50; color: white; }
-                    .easy { background: #8BC34A; color: white; }
+                    .difficulty-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #ccc !important; }
+                    .very-easy { background: #4CAF50; }
+                    .easy { background: #8BC34A; }
                     .medium { background: #FFC107; color: black; }
-                    .hard { background: #FF9800; color: white; }
-                    .very-hard { background: #F44336; color: white; }
+                    .hard { background: #FF9800; }
+                    .very-hard { background: #F44336; }
 
-                    .difficulty-btn:hover {
-                        opacity: 0.9;
-                        transform: translateY(-2px);
-                    }
-
-                    table {
-                        border-collapse: collapse;
-                        margin: 0 auto 20px;
-                    }
-
-                    td {
-                        width: 45px;
-                        height: 45px;
-                        text-align: center;
-                        border: 1px solid #d0d4d9;
-                        position: relative;
-                    }
-
+                    table { border-collapse: collapse; margin: 0 auto 20px; }
+                    td { text-align: center; border: 1px solid #d0d4d9; padding: 0; }
                     input {
-                        width: 100%;
-                        height: 100%;
-                        border: none;
-                        text-align: center;
-                        font-size: 20px;
-                        background: transparent;
-                        outline: none;
-                        color: #2c3e50;
-                        font-weight: 500;
+                        width: 100%; height: 100%; border: none; text-align: center;
+                        background: transparent; outline: none; color: #2c3e50; font-weight: 500; padding: 0;
                     }
+                    input:focus { background: #e9f3ff; }
 
-                    input:focus {
-                        background: #e9f3ff;
-                        border-radius: 6px;
-                    }
+                    .thick-right { border-right: 2px solid #000 !important; }
+                    .thick-bottom { border-bottom: 2px solid #000 !important; }
+                    .thick-left { border-left: 2px solid #000 !important; }
+                    .thick-top { border-top: 2px solid #000 !important; }
 
-                    .thick-right { border-right: 2px solid #000; }
-                    .thick-bottom { border-bottom: 2px solid #000; }
-
-                    .buttons {
-                        display: flex;
-                        justify-content: center;
-                        gap: 12px;
-                        margin-top: 10px;
-                        flex-wrap: wrap;
-                        max-width: 450px;
-                        margin-left: auto;
-                        margin-right: auto;
-                    }
-
-                    .buttons button {
-                        padding: 10px 16px;
-                        font-size: 15px;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-                        transition: 0.2s ease;
-                        font-weight: 500;
-                        width: calc(33.333% - 12px); /* 3 buttons per row accounting for gap */
-                        min-width: 120px;
-                    }
-
+                    .buttons { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; justify-content: center;}
                     button {
-                        padding: 10px 16px;
-                        font-size: 15px;
-                        border: none;
-                        border-radius: 8px;
-                        cursor: pointer;
-                        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
-                        transition: 0.2s ease;
-                        font-weight: 500;
+                        padding: 10px 16px; font-size: 14px; border: none; border-radius: 8px;
+                        cursor: pointer; color: white; font-weight: 500;
                     }
-
-                    #btn-backtrack {
-                        background: #4e73df;
-                        color: white;
-                    }
-                    #btn-backtrack:hover { background: #3c5dc6; }
-
-                    #btn-dlx {
-                        background: #1cc88a;
-                        color: white;
-                    }
-                    #btn-dlx:hover { background: #16a472; }
-
-                    #btn-clear {
-                        background: #6c757d;
-                        color: white;
-                    }
+                    #btn-solve { background: #4e73df; }
+                    #btn-solve:hover { background: #3c5dc6; }
+                    #btn-clear { background: #6c757d; }
                     #btn-clear:hover { background: #5a6268; }
-
-                    button:active {
-                        transform: scale(0.97);
-                    }
-
-                    #solve-time, #puzzle-info {
-                        text-align: center;
-                        margin-top: 15px;
-                        font-size: 16px;
-                        font-weight: 500;
-                    }
-
-                    .loading {
-                        opacity: 0.6;
-                        pointer-events: none;
-                    }
+                    
+                    #solve-time, #puzzle-info { text-align: center; margin-top: 15px; min-height: 20px; }
                 </style>
             </head>
             <body>
                 <h2>Sudoku Solver</h2>
                 <div class="container">
-                    <div class="difficulty-buttons">
-                        <!--
-                        I switched hard with very-hard and very-easy with easy because
-                        the API that is generating the puzzles is not consistent
-                        The "hard" puzzles are actually very hard and the "very-hard" puzzles are easier than the hard ones.
-                        Same thing for easy and very-easy.
-                        -->
+                    <div class="controls-top">
+                        <label>Size: 
+                            <select id="size-select" onchange="changeSize()">
+                                <option value="9">9x9</option>
+                                <option value="16">16x16</option>
+                                <option value="25">25x25</option>
+                            </select>
+                        </label>
+                        <label>Algorithm: 
+                            <select id="algo-select">
+                                <option value="dlx">Dancing Links (DLX)</option>
+                                <option value="bitmask">Bitmask Backtracking</option>
+                                <option value="simple">Simple Backtracking</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="difficulty-buttons" id="diff-container">
                         <button class="difficulty-btn very-easy" onclick="loadPuzzle('easy')">Very Easy</button>
                         <button class="difficulty-btn easy" onclick="loadPuzzle('very-easy')">Easy</button>
                         <button class="difficulty-btn medium" onclick="loadPuzzle('medium')">Medium</button>
@@ -194,35 +126,59 @@ class Handler implements HttpHandler {
                         <button class="difficulty-btn very-hard" onclick="loadPuzzle('hard')">Very Hard</button>
                     </div>
                     
-                    <table id="sudoku-grid">
-                        <!-- Grid will be generated by JavaScript -->
-                    </table>
+                    <div id="puzzle-info" style="margin-bottom: 10px; font-size: 0.9em; color:#666;">Select difficulty to load</div>
+
+                    <table id="sudoku-grid"></table>
                     
                     <div class="buttons">
-                        <button id="btn-backtrack" onclick="solve('backtrack')">Solve (Bitmask Backtracking)</button>
-                        <button id="btn-dlx" onclick="solve('dlx')">Solve (DLX)</button>
-                        <button id="btn-simple" onclick="solve('simple')">Solve (Simple Backtracking)</button>
+                        <button id="btn-solve" onclick="solve()">Solve Puzzle</button>
                         <button id="btn-clear" onclick="clearGrid()">Clear</button>
                     </div>
                     
-                    <div id="puzzle-info">Select a difficulty to load a puzzle</div>
                     <div id="solve-time"></div>
                 </div>
 
                 <script>
-                    // Initialize empty grid
-                    function initializeGrid() {
+                    let currentSize = 9;
+                    let originalFilled = [];
+
+                    function changeSize() {
+                        const sel = document.getElementById('size-select');
+                        currentSize = parseInt(sel.value);
+                        initializeGrid(currentSize);
+                        
+                        const diffBtns = document.querySelectorAll('.difficulty-btn');
+                        diffBtns.forEach(btn => {
+                            btn.disabled = (currentSize !== 9);
+                            btn.style.display = (currentSize !== 9) ? 'none' : 'inline-block';
+                        });
+                        
+                        document.getElementById('puzzle-info').textContent = 
+                            currentSize === 9 ? "Select difficulty to load" : "External API only supports 9x9. Please enter manually.";
+                    }
+
+                    function initializeGrid(size) {
                         const grid = document.getElementById('sudoku-grid');
                         let html = '';
-                        for (let i = 0; i < 9; i++) {
+                        const blockSize = Math.sqrt(size);
+                        let cellSize = 45; let fontSize = 20;
+                        if(size === 16) { cellSize = 30; fontSize = 14; }
+                        if(size === 25) { cellSize = 24; fontSize = 11; }
+
+                        for (let i = 0; i < size; i++) {
                             html += '<tr>';
-                            for (let j = 0; j < 9; j++) {
+                            for (let j = 0; j < size; j++) {
                                 const classes = [];
-                                if (j === 2 || j === 5) classes.push('thick-right');
-                                if (i === 2 || i === 5) classes.push('thick-bottom');
-                                html += `<td class="${classes.join(' ')}">
-                                            <input type="text" maxlength="1" id="c${i}${j}" 
-                                            oninput="this.value=this.value.replace(/[^1-9]/g,'')">
+                                if ((j + 1) % blockSize === 0 && j !== size - 1) classes.push('thick-right');
+                                if ((i + 1) % blockSize === 0 && i !== size - 1) classes.push('thick-bottom');
+                                if (i === 0) classes.push('thick-top');
+                                if (j === 0) classes.push('thick-left');
+                                if (j === size - 1) classes.push('thick-right');
+                                if (i === size - 1) classes.push('thick-bottom');
+
+                                html += `<td class="${classes.join(' ')}" style="width:${cellSize}px; height:${cellSize}px;">
+                                            <input type="text" id="c${i}_${j}" style="font-size:${fontSize}px"
+                                                oninput="validateInput(this, ${size})">
                                         </td>`;
                             }
                             html += '</tr>';
@@ -230,295 +186,209 @@ class Handler implements HttpHandler {
                         grid.innerHTML = html;
                     }
 
-                    let originalFilled = [];
+                    function validateInput(el, size) {
+                        el.value = el.value.replace(/[^0-9]/g, '');
+                        if(el.value !== '') {
+                            const val = parseInt(el.value);
+                            if(val < 1 || val > size) el.value = '';
+                        }
+                    }
 
                     function saveOriginalState() {
                         originalFilled = [];
-                        for (let i = 0; i < 9; i++) {
+                        for (let i = 0; i < currentSize; i++) {
                             originalFilled[i] = [];
-                            for (let j = 0; j < 9; j++) {
-                                originalFilled[i][j] = document.getElementById(`c${i}${j}`).value !== '';
+                            for (let j = 0; j < currentSize; j++) {
+                                originalFilled[i][j] = document.getElementById(`c${i}_${j}`).value !== '';
                             }
                         }
                     }
 
                     async function loadPuzzle(difficulty) {
+                        if(currentSize !== 9) return; 
                         const infoEl = document.getElementById('puzzle-info');
-                        const buttons = document.querySelectorAll('.difficulty-btn');
-                        
-                        // Show loading state
-                        infoEl.textContent = 'Loading puzzle...';
-                        buttons.forEach(btn => btn.classList.add('loading'));
-                        
+                        infoEl.textContent = 'Loading...';
                         try {
                             const response = await fetch('/load-puzzle?difficulty=' + difficulty);
                             const data = await response.json();
-                            
                             if (data.puzzle) {
-                                // Update the grid with new puzzle
+                                clearGrid();
                                 for (let i = 0; i < 9; i++) {
                                     for (let j = 0; j < 9; j++) {
                                         const value = data.puzzle[i][j];
-                                        const cell = document.getElementById(`c${i}${j}`);
-                                        cell.value = value === 0 ? '' : value;
-                                        cell.style.color = value !== 0 ? '#e74c3c' : '#2c3e50';
+                                        const cell = document.getElementById(`c${i}_${j}`);
+                                        if(value !== 0) { cell.value = value; }
                                     }
                                 }
-                                let displayDifficulty;
-                                if (difficulty === 'easy') {
-                                    displayDifficulty = 'Very Easy';
-                                } else if (difficulty === 'very-easy') {
-                                    displayDifficulty = 'Easy';
-                                } else if (difficulty === 'hard') {
-                                    displayDifficulty = 'Very Hard';
-                                } else if (difficulty === 'very-hard') {
-                                    displayDifficulty = 'Hard';
-                                } else {
-                                    displayDifficulty = difficulty.replace('-', ' ');
-                                }
-                                infoEl.textContent = `Loaded ${displayDifficulty} puzzle`;
-                                infoEl.classList.remove('loading');
-                                infoEl.style.color = '#2c3e50';
-                            } else {
-                                infoEl.textContent = 'Failed to load puzzle';
-                                infoEl.style.color = '#e74c3c';
+                                infoEl.textContent = "Loaded!";
                             }
-                        } catch (error) {
-                            console.error('Error loading puzzle:', error);
-                            infoEl.textContent = 'Error loading puzzle';
-                            infoEl.style.color = '#e74c3c';
-                        } finally {
-                            buttons.forEach(btn => btn.classList.remove('loading'));
-                        }
+                        } catch (error) { infoEl.textContent = 'Error loading puzzle'; }
                     }
 
-                    function solve(method) {
+                    function solve() {
                         saveOriginalState();
+                        const method = document.getElementById('algo-select').value;
                         const puzzle = [];
-                        for (let i = 0; i < 9; i++) {
+                        for (let i = 0; i < currentSize; i++) {
                             puzzle[i] = [];
-                            for (let j = 0; j < 9; j++) {
-                                const val = document.getElementById(`c${i}${j}`).value;
+                            for (let j = 0; j < currentSize; j++) {
+                                const val = document.getElementById(`c${i}_${j}`).value;
                                 puzzle[i][j] = val ? parseInt(val) : 0;
                             }
                         }
 
+                        const timeEl = document.getElementById('solve-time');
+                        timeEl.innerHTML = "Solving with <b>" + method.toUpperCase() + "</b>...";
+
                         fetch('/solve', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ method: method, puzzle: puzzle })
+                            body: JSON.stringify({ puzzle: puzzle, method: method })
                         })
                         .then(r => r.json())
                         .then(data => {
-                            const timeEl = document.getElementById('solve-time');
                             if (data.solution) {
-                                for (let i = 0; i < 9; i++) {
-                                    for (let j = 0; j < 9; j++) {
-                                        const cell = document.getElementById(`c${i}${j}`);
+                                for (let i = 0; i < currentSize; i++) {
+                                    for (let j = 0; j < currentSize; j++) {
+                                        const cell = document.getElementById(`c${i}_${j}`);
                                         cell.value = data.solution[i][j];
                                         cell.style.color = originalFilled[i][j] ? '#e74c3c' : '#2c3e50';
                                     }
                                 }
-                                timeEl.innerHTML = `<span style="color:#4e73df">Algorithm:</span> ${method.toUpperCase()} | 
-                                                   <span style="color:#1cc88a">Time:</span> ${data.timeMs} ms`;
-                                timeEl.style.color = '#2c3e50';
+                                timeEl.innerHTML = `<span style="color:#1cc88a">Algorithm:</span> ${method.toUpperCase()} | <span style="color:#1cc88a">Time:</span> ${data.timeMs} ms`;
                             } else {
-                                timeEl.textContent = 'No solution found!';
+                                timeEl.textContent = 'No solution found! (Puzzle might be invalid)';
                                 timeEl.style.color = '#e74c3c';
                             }
+                        })
+                        .catch(e => {
+                            timeEl.textContent = 'Server Error (Check console)';
+                            timeEl.style.color = '#e74c3c';
                         });
                     }
 
                     function clearGrid() {
-                        for (let i = 0; i < 9; i++) {
-                            for (let j = 0; j < 9; j++) {
-                                const cell = document.getElementById(`c${i}${j}`);
+                        for (let i = 0; i < currentSize; i++) {
+                            for (let j = 0; j < currentSize; j++) {
+                                const cell = document.getElementById(`c${i}_${j}`);
                                 cell.value = '';
                                 cell.style.color = '#2c3e50';
                             }
                         }
                         document.getElementById('solve-time').textContent = '';
-                        document.getElementById('puzzle-info').textContent = 'Grid cleared';
                     }
 
-                    // Initialize when page loads
-                    initializeGrid();
+                    initializeGrid(9);
                 </script>
             </body>
             </html>
             """;
-        
-        if (t.getRequestURI().getPath().equals("/")) {
-            t.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-            sendResponse(t, response);
-        } else if (t.getRequestURI().getPath().equals("/solve")) {
-            handleSolveRequest(t);
-        } else if (t.getRequestURI().getPath().equals("/load-puzzle")) {
-            handleLoadPuzzleRequest(t);
-        }
+        t.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+        sendResponse(t, response);
     }
 
     private void handleSolveRequest(HttpExchange t) throws IOException {
         if ("POST".equals(t.getRequestMethod())) {
             String body = new String(t.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             try {
-                String method = "bitmask";
-                if (body.contains("\"method\":\"dlx\"")) {
-                    method = "dlx";
-                } else if (body.contains("\"method\":\"simple\"")) {
-                    method = "simple";
-                } 
+                // Parse Method from JSON
+                String method = "dlx"; 
+                if (body.contains("\"method\":\"bitmask\"")) method = "bitmask";
+                if (body.contains("\"method\":\"simple\"")) method = "simple";
 
-                int startIdx = body.indexOf("\"puzzle\":") + 9;
-                String puzzleStr = body.substring(startIdx).trim();
-                if (puzzleStr.endsWith("}")) {
-                    puzzleStr = puzzleStr.substring(0, puzzleStr.length() - 1);
-                }
-                int[][] puzzle = parsePuzzle(puzzleStr);
+                // Robust Parsing: Extract and Parse the Matrix
+                int[][] puzzle = parsePuzzleRegex(body);
+                
+                long timeTaken = -1;
+                int size = puzzle.length;
 
-                long timeNanos;
-                if ("dlx".equals(method)) {
-                    timeNanos = SudokuDLX.solveWithTime(puzzle);
-                } else if ("simple".equals(method)) {
-                    timeNanos = SudokuSolverSimple.solveSudokuWithTime(puzzle);
+                // Create new instances for thread safety
+                if (method.equals("bitmask")) {
+                    timeTaken = new SolverBitmask().solveWithTime(puzzle);
+                } else if (method.equals("simple")) {
+                    timeTaken = SolverSimple.solveWithTime(puzzle);
                 } else {
-                    timeNanos = SudokuSolver.solveSudokuWithTime(puzzle);
+                    timeTaken = new SolverDLX(size).solveWithTime(puzzle);
                 }
 
-                String solJson;
-                if (timeNanos >= 0) {
-                    solJson = String.format(
-                        "{\"solution\":%s,\"timeMs\":%.2f}",
-                        Arrays.deepToString(puzzle).replace(" ", ""),
-                        timeNanos / 1_000_000.0
-                    );
-                } else {
-                    solJson = "{\"solution\":null,\"timeMs\":0}";
-                }
+                String solJson = (timeTaken >= 0) 
+                    ? String.format("{\"solution\":%s,\"timeMs\":%.2f}", arrayToJSON(puzzle), timeTaken / 1_000_000.0)
+                    : "{\"solution\":null,\"timeMs\":0}";
 
                 t.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
                 sendResponse(t, solJson);
             } catch (Exception e) {
+                e.printStackTrace(); // This goes to server console
+                // Return valid JSON error to client so it doesn't hang
                 sendResponse(t, "{\"solution\":null,\"timeMs\":0}");
             }
         }
     }
 
+    // New Robust Regex Parser
+    private int[][] parsePuzzleRegex(String jsonBody) {
+        // 1. Extract the array part: Find substring between [[ and ]]
+        int start = jsonBody.indexOf("[[");
+        int end = jsonBody.lastIndexOf("]]");
+        
+        if (start == -1 || end == -1) {
+            throw new IllegalArgumentException("Invalid JSON: '[[...]]' structure not found.");
+        }
+        
+        String arrayContent = jsonBody.substring(start, end + 2);
+        
+        // 2. Extract all numbers using Regex. This ignores brackets, whitespace, and commas.
+        List<Integer> numbers = new ArrayList<>();
+        Matcher m = Pattern.compile("-?\\d+").matcher(arrayContent);
+        
+        while (m.find()) {
+            numbers.add(Integer.parseInt(m.group()));
+        }
+        
+        // 3. Determine grid size
+        int totalCells = numbers.size();
+        int size = (int) Math.sqrt(totalCells);
+        
+        if (size * size != totalCells) {
+             // Fallback or error if not a perfect square (e.g. malformed input)
+             throw new IllegalArgumentException("Total numbers (" + totalCells + ") do not form a square grid.");
+        }
+
+        // 4. Fill Grid
+        int[][] grid = new int[size][size];
+        int idx = 0;
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                grid[i][j] = numbers.get(idx++);
+            }
+        }
+        return grid;
+    }
+
     private void handleLoadPuzzleRequest(HttpExchange t) throws IOException {
         String query = t.getRequestURI().getQuery();
         String difficulty = "easy";
-        
-        if (query != null && query.startsWith("difficulty=")) {
-            difficulty = query.substring(11);
-        }
+        if (query != null && query.startsWith("difficulty=")) difficulty = query.substring(11);
 
         try {
             int[][] puzzle = fetchPuzzleFromAPI(difficulty);
-            String jsonResponse = String.format("{\"puzzle\":%s}", Arrays.deepToString(puzzle).replace(" ", ""));
-            
+            String jsonResponse = String.format("{\"puzzle\":%s}", arrayToJSON(puzzle));
             t.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-            t.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
             sendResponse(t, jsonResponse);
         } catch (Exception e) {
-            // Fallback to local puzzles if API fails
-            int[][] fallbackPuzzle = getFallbackPuzzle(difficulty);
-            String jsonResponse = String.format("{\"puzzle\":%s}", Arrays.deepToString(fallbackPuzzle).replace(" ", ""));
-            
+            int[][] fallback = new int[9][9];
+            fallback[0][0] = 5; 
+            String jsonResponse = String.format("{\"puzzle\":%s}", arrayToJSON(fallback));
             t.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
             sendResponse(t, jsonResponse);
         }
     }
 
     private int[][] fetchPuzzleFromAPI(String difficulty) throws IOException, InterruptedException {
-        // Using sudoku-api.vercel.app API which provides puzzles of different difficulties
-        String apiUrl = "https://sudoku-api.vercel.app/api/dosuku?query={newboard(limit:1){grids{value}}}";
-        
-        // Alternative API with difficulty support
         String difficultyApiUrl = String.format("https://sugoku.onrender.com/board?difficulty=%s", difficulty);
-        
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(difficultyApiUrl))
-                .header("Accept", "application/json")
-                .GET()
-                .build();
-        
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(difficultyApiUrl)).header("Accept", "application/json").GET().build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        
-        // Parse the response - format: {"board":[[...],[...],...]}
-        String responseBody = response.body();
-        int startIdx = responseBody.indexOf("\"board\":") + 8;
-        int endIdx = responseBody.indexOf("]", startIdx) + 1;
-        String boardStr = responseBody.substring(startIdx, endIdx);
-        
-        return parsePuzzle(boardStr);
-    }
-
-    private int[][] getFallbackPuzzle(String difficulty) {
-        // Fallback puzzles in case API is unavailable
-        switch (difficulty) {
-            case "very-easy":
-                return new int[][]{
-                    {5, 3, 0, 0, 7, 0, 0, 0, 0},
-                    {6, 0, 0, 1, 9, 5, 0, 0, 0},
-                    {0, 9, 8, 0, 0, 0, 0, 6, 0},
-                    {8, 0, 0, 0, 6, 0, 0, 0, 3},
-                    {4, 0, 0, 8, 0, 3, 0, 0, 1},
-                    {7, 0, 0, 0, 2, 0, 0, 0, 6},
-                    {0, 6, 0, 0, 0, 0, 2, 8, 0},
-                    {0, 0, 0, 4, 1, 9, 0, 0, 5},
-                    {0, 0, 0, 0, 8, 0, 0, 7, 9}
-                };
-            case "easy":
-                return new int[][]{
-                    {0, 0, 3, 0, 2, 0, 6, 0, 0},
-                    {9, 0, 0, 3, 0, 5, 0, 0, 1},
-                    {0, 0, 1, 8, 0, 6, 4, 0, 0},
-                    {0, 0, 8, 1, 0, 2, 9, 0, 0},
-                    {7, 0, 0, 0, 0, 0, 0, 0, 8},
-                    {0, 0, 6, 7, 0, 8, 2, 0, 0},
-                    {0, 0, 2, 6, 0, 9, 5, 0, 0},
-                    {8, 0, 0, 2, 0, 3, 0, 0, 9},
-                    {0, 0, 5, 0, 1, 0, 3, 0, 0}
-                };
-            case "medium":
-                return new int[][]{
-                    {0, 2, 0, 6, 0, 8, 0, 0, 0},
-                    {5, 8, 0, 0, 0, 9, 7, 0, 0},
-                    {0, 0, 0, 0, 4, 0, 0, 0, 0},
-                    {3, 7, 0, 0, 0, 0, 5, 0, 0},
-                    {6, 0, 0, 0, 0, 0, 0, 0, 4},
-                    {0, 0, 8, 0, 0, 0, 0, 1, 3},
-                    {0, 0, 0, 0, 2, 0, 0, 0, 0},
-                    {0, 0, 9, 8, 0, 0, 0, 3, 6},
-                    {0, 0, 0, 3, 0, 6, 0, 9, 0}
-                };
-            case "hard":
-                return new int[][]{
-                    {0, 0, 0, 6, 0, 0, 4, 0, 0},
-                    {7, 0, 0, 0, 0, 3, 6, 0, 0},
-                    {0, 0, 0, 0, 9, 1, 0, 8, 0},
-                    {0, 0, 0, 0, 0, 0, 0, 0, 0},
-                    {0, 5, 0, 1, 8, 0, 0, 0, 3},
-                    {0, 0, 0, 3, 0, 6, 0, 4, 5},
-                    {0, 4, 0, 2, 0, 0, 0, 6, 0},
-                    {9, 0, 3, 0, 0, 0, 0, 0, 0},
-                    {0, 2, 0, 0, 0, 0, 1, 0, 0}
-                };
-            case "very-hard":
-                return new int[][]{
-                    {8, 0, 0, 0, 0, 0, 0, 0, 0},
-                    {0, 0, 3, 6, 0, 0, 0, 0, 0},
-                    {0, 7, 0, 0, 9, 0, 2, 0, 0},
-                    {0, 5, 0, 0, 0, 7, 0, 0, 0},
-                    {0, 0, 0, 0, 4, 5, 7, 0, 0},
-                    {0, 0, 0, 1, 0, 0, 0, 3, 0},
-                    {0, 0, 1, 0, 0, 0, 0, 6, 8},
-                    {0, 0, 8, 5, 0, 0, 0, 1, 0},
-                    {0, 9, 0, 0, 0, 0, 4, 0, 0}
-                };
-            default:
-                return new int[9][9]; // Empty grid
-        }
+        return parsePuzzleRegex(response.body());
     }
 
     private void sendResponse(HttpExchange t, String response) throws IOException {
@@ -529,40 +399,270 @@ class Handler implements HttpHandler {
         os.close();
     }
 
-    private int[][] parsePuzzle(String rawBody) {
-        String body = rawBody.replaceAll("\\s", "").trim();
-        if (body.length() < 4 || !body.startsWith("[[") || !body.endsWith("]]")) {
-            throw new IllegalArgumentException("Invalid puzzle payload");
-        }
-
-        String inner = body.substring(2, body.length() - 2);
-        String[] rows = inner.split("\\],\\[");
-        if (rows.length != 9) {
-            throw new IllegalArgumentException("Puzzle must have 9 rows");
-        }
-
-        int[][] puzzle = new int[9][9];
-        for (int i = 0; i < 9; i++) {
-            String[] nums = rows[i].split(",");
-            if (nums.length != 9) {
-                throw new IllegalArgumentException("Each row must have 9 values");
+    private String arrayToJSON(int[][] matrix) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for (int i = 0; i < matrix.length; i++) {
+            sb.append("[");
+            for (int j = 0; j < matrix[i].length; j++) {
+                sb.append(matrix[i][j]);
+                if (j < matrix[i].length - 1) sb.append(",");
             }
-            for (int j = 0; j < 9; j++) {
-                puzzle[i][j] = Integer.parseInt(nums[j]);
-            }
+            sb.append("]");
+            if (i < matrix.length - 1) sb.append(",");
         }
-        return puzzle;
+        sb.append("]");
+        return sb.toString();
     }
 }
 
-public class SudokuServer {
-    public static void main(String[] args) throws IOException {
-        int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/", new Handler());
-        server.setExecutor(null);
-        server.start();
-        System.out.println("Server running at http://localhost:" + port);
-        System.out.println("Available difficulties: very-easy, easy, medium, hard, very-hard");
+// ================= ALGORITHM 1: SIMPLE BACKTRACKING =================
+class SolverSimple {
+    static boolean isSafe(int[][] mat, int row, int col, int num, int n, int sqrt) {
+        for (int x = 0; x < n; x++) if (mat[row][x] == num) return false;
+        for (int x = 0; x < n; x++) if (mat[x][col] == num) return false;
+        int startRow = row - (row % sqrt);
+        int startCol = col - (col % sqrt);
+        for (int i = 0; i < sqrt; i++)
+            for (int j = 0; j < sqrt; j++)
+                if (mat[i + startRow][j + startCol] == num) return false;
+        return true;
+    }
+
+    static boolean solveRec(int[][] mat, int row, int col, int n, int sqrt) {
+        if (row == n - 1 && col == n) return true;
+        if (col == n) { row++; col = 0; }
+        if (mat[row][col] != 0) return solveRec(mat, row, col + 1, n, sqrt);
+        for (int num = 1; num <= n; num++) {
+            if (isSafe(mat, row, col, num, n, sqrt)) {
+                mat[row][col] = num;
+                if (solveRec(mat, row, col + 1, n, sqrt)) return true;
+                mat[row][col] = 0;
+            }
+        }
+        return false;
+    }
+
+    static long solveWithTime(int[][] puzzle) {
+        int n = puzzle.length;
+        int sqrt = (int) Math.sqrt(n);
+        int[][] copy = new int[n][n];
+        for (int i = 0; i < n; i++) System.arraycopy(puzzle[i], 0, copy[i], 0, n);
+        
+        long start = System.nanoTime();
+        boolean solved = solveRec(copy, 0, 0, n, sqrt);
+        long end = System.nanoTime();
+        
+        if (solved) for (int i = 0; i < n; i++) System.arraycopy(copy[i], 0, puzzle[i], 0, n);
+        return solved ? (end - start) : -1;
+    }
+}
+
+// ================= ALGORITHM 2: BITMASK BACKTRACKING =================
+class SolverBitmask {
+    private int[] rowMask;
+    private int[] colMask;
+    private int[] boxMask;
+    private int N, SQRT;
+
+    public long solveWithTime(int[][] puzzle) {
+        this.N = puzzle.length;
+        this.SQRT = (int) Math.sqrt(N);
+        this.rowMask = new int[N];
+        this.colMask = new int[N];
+        this.boxMask = new int[N];
+
+        int[][] copy = new int[N][N];
+        for (int i = 0; i < N; i++) System.arraycopy(puzzle[i], 0, copy[i], 0, N);
+
+        if (!initializeMasks(copy)) return -1; // Invalid initial board
+        
+        long start = System.nanoTime();
+        boolean solved = solveRec(copy, 0, 0);
+        long end = System.nanoTime();
+
+        if (solved) for (int i = 0; i < N; i++) System.arraycopy(copy[i], 0, puzzle[i], 0, N);
+        return solved ? (end - start) : -1;
+    }
+
+    private boolean initializeMasks(int[][] grid) {
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                if (grid[i][j] != 0) {
+                    int num = grid[i][j];
+                    int bit = 1 << num;
+                    int box = (i / SQRT) * SQRT + (j / SQRT);
+                    
+                    // Check for pre-existing conflicts
+                    if ((rowMask[i] & bit) != 0 || (colMask[j] & bit) != 0 || (boxMask[box] & bit) != 0) {
+                        return false; 
+                    }
+                    
+                    rowMask[i] |= bit;
+                    colMask[j] |= bit;
+                    boxMask[box] |= bit;
+                }
+            }
+        }
+        return true;
+    }
+
+    private boolean solveRec(int[][] mat, int row, int col) {
+        if (row == N - 1 && col == N) return true;
+        if (col == N) { row++; col = 0; }
+        if (mat[row][col] != 0) return solveRec(mat, row, col + 1);
+
+        int box = (row / SQRT) * SQRT + (col / SQRT);
+        for (int num = 1; num <= N; num++) {
+            int bit = 1 << num;
+            if ((rowMask[row] & bit) == 0 && (colMask[col] & bit) == 0 && (boxMask[box] & bit) == 0) {
+                mat[row][col] = num;
+                rowMask[row] |= bit; colMask[col] |= bit; boxMask[box] |= bit;
+                
+                if (solveRec(mat, row, col + 1)) return true;
+                
+                mat[row][col] = 0;
+                rowMask[row] &= ~bit; colMask[col] &= ~bit; boxMask[box] &= ~bit;
+            }
+        }
+        return false;
+    }
+}
+
+// ================= ALGORITHM 3: DANCING LINKS (DLX) =================
+class SolverDLX {
+    class DLXNode {
+        DLXNode L, R, U, D;
+        ColumnNode C;
+        int rowID;
+        DLXNode() { L=R=U=D=this; }
+    }
+    class ColumnNode extends DLXNode { int size = 0; }
+
+    private int N, SQRT, COLS;
+    private DLXNode header;
+    private ColumnNode[] columns;
+    private boolean[] isColumnCovered; // To track coverage status safely
+
+    public SolverDLX(int size) {
+        this.N = size;
+        this.SQRT = (int) Math.sqrt(N);
+        this.COLS = 4 * N * N;
+        this.isColumnCovered = new boolean[COLS];
+    }
+
+    public long solveWithTime(int[][] puzzle) {
+        buildMatrix();
+        long start = System.nanoTime();
+        boolean solved = solveInternal(puzzle);
+        long end = System.nanoTime();
+        return solved ? (end - start) : -1;
+    }
+
+    private void buildMatrix() {
+        header = new DLXNode();
+        columns = new ColumnNode[COLS];
+        DLXNode prev = header;
+        for (int i = 0; i < COLS; i++) {
+            ColumnNode col = new ColumnNode();
+            col.C = col; prev.R = col; col.L = prev; prev = col; columns[i] = col;
+        }
+        prev.R = header; header.L = prev;
+        
+        for (int r = 0; r < N; r++)
+            for (int c = 0; c < N; c++)
+                for (int n = 0; n < N; n++)
+                    addRow(r, c, n);
+    }
+
+    private void addRow(int r, int c, int n) {
+        int rowID = r * (N * N) + c * N + n;
+        int box = (r / SQRT) * SQRT + (c / SQRT);
+        int[] indices = {
+            r * N + c,
+            N * N + r * N + n,
+            2 * N * N + c * N + n,
+            3 * N * N + box * N + n
+        };
+        DLXNode prev = null, first = null;
+        for (int idx : indices) {
+            DLXNode node = new DLXNode();
+            node.rowID = rowID;
+            node.C = columns[idx];
+            node.U = columns[idx].U; node.D = columns[idx];
+            columns[idx].U.D = node; columns[idx].U = node;
+            columns[idx].size++;
+            if (first == null) first = node;
+            if (prev != null) { prev.R = node; node.L = prev; }
+            prev = node;
+        }
+        if(prev != null) { prev.R = first; first.L = prev; }
+    }
+
+    private void cover(ColumnNode c) {
+        c.R.L = c.L; c.L.R = c.R;
+        for (DLXNode i = c.D; i != c; i = i.D)
+            for (DLXNode j = i.R; j != i; j = j.R) {
+                j.D.U = j.U; j.U.D = j.D; j.C.size--;
+            }
+    }
+
+    private void uncover(ColumnNode c) {
+        for (DLXNode i = c.U; i != c; i = i.U)
+            for (DLXNode j = i.L; j != i; j = j.L) {
+                j.C.size++; j.D.U = j; j.U.D = j;
+            }
+        c.R.L = c; c.L.R = c;
+    }
+
+    private boolean search(List<Integer> solution) {
+        if (header.R == header) return true;
+        ColumnNode c = null; int min = Integer.MAX_VALUE;
+        for (DLXNode j = header.R; j != header; j = j.R)
+            if (((ColumnNode)j).size < min) { min = ((ColumnNode)j).size; c = (ColumnNode)j; }
+        
+        cover(c);
+        for (DLXNode r = c.D; r != c; r = r.D) {
+            solution.add(r.rowID);
+            for (DLXNode j = r.R; j != r; j = j.R) cover(j.C);
+            if (search(solution)) return true;
+            solution.remove(solution.size() - 1);
+            for (DLXNode j = r.L; j != r; j = j.L) uncover(j.C);
+        }
+        uncover(c);
+        return false;
+    }
+
+    private boolean solveInternal(int[][] grid) {
+        List<Integer> solution = new ArrayList<>();
+        // Apply pre-filled cells constraints
+        for (int r = 0; r < N; r++) {
+            for (int c = 0; c < N; c++) {
+                if (grid[r][c] != 0) {
+                    int n = grid[r][c] - 1;
+                    int box = (r/SQRT)*SQRT + (c/SQRT);
+                    int[] idxs = {
+                        r*N+c, N*N+r*N+n, 2*N*N+c*N+n, 3*N*N+box*N+n
+                    };
+                    for(int idx : idxs) {
+                        // Prevent covering an already covered column (Invalid Puzzle)
+                        if (isColumnCovered[idx]) return false;
+                        
+                        cover(columns[idx]);
+                        isColumnCovered[idx] = true;
+                    }
+                    solution.add(r*(N*N) + c*N + n);
+                }
+            }
+        }
+        
+        if (!search(solution)) return false;
+        
+        for (int id : solution) {
+            int r = id / (N * N);
+            int rem = id % (N * N);
+            grid[r][rem / N] = (rem % N) + 1;
+        }
+        return true;
     }
 }
